@@ -493,6 +493,15 @@ def env_ports(notes):
     return ports[0], ports[1]
 
 
+def env_int(name, default, minimum):
+    """An integer setting from the environment: a bad value is the default, a small one the minimum
+    (a 0 or a word must not make a backup delete itself)."""
+    try:
+        return max(minimum, int(str(os.environ.get(name, "")).strip() or default))
+    except ValueError:
+        return default
+
+
 def apply_env(notes, created):
     """Each ICARUS_* value that is set, written when the file is new or the value differs from the
     one last applied."""
@@ -501,6 +510,14 @@ def apply_env(notes, created):
     changed = False
     for name, key in ENV_KEYS.items():
         if not env_set(name):
+            # A password that was set by the deployment and is now emptied there is removed: the
+            # marketplace writes NAME= for a blank one. A blank on a first deploy changes nothing.
+            if key in SECRET_KEYS and name in os.environ and applied.get(name):
+                done, errors = set_ini_values({key: ""})
+                if not errors:
+                    notes.append(f"{key} = (none) ({name} emptied)")
+                    applied[name] = ""
+                    changed = True
             continue
         raw = os.environ[name]
         if not created and applied.get(name) == raw:
@@ -891,10 +908,21 @@ def prune_backups(keep):
     rows = list_backups()
     index = load_index()
     kept = 0
+    safety = 0
+    safety_max = env_int("FLUX_BACKUP_KEEP_SAFETY", 20, 1)
     good_seen = False
     for row in rows:
         meta = index.get(row["name"], {})
         if meta.get("keep"):
+            # Safety copies are never rotated out by the regular count, but there is a ceiling (newest
+            # first), or every restore and delete would add a full copy for good.
+            safety += 1
+            if safety > safety_max:
+                try:
+                    os.remove(os.path.join(BACKUP_DIR, row["name"]))
+                except OSError:
+                    pass
+                index.pop(row["name"], None)
             continue
         if not good_seen and meta.get("good"):
             good_seen = True
@@ -954,7 +982,7 @@ def make_backup(why, force=False):
     state = load_state()
     index[name] = {"time": int(time.time()), "why": why, "keep": why.startswith("before"), "good": state.get("state") == "running"}
     write_json(BACKUP_INDEX, index)
-    prune_backups(int(os.environ.get("FLUX_BACKUP_KEEP", "6")))
+    prune_backups(env_int("FLUX_BACKUP_KEEP", 6, 1))
     return [f"# backup {name} ({why}, {os.path.getsize(path) // 1024} KB)"]
 
 
@@ -1244,6 +1272,17 @@ def cmd_status(_args):
     out(result)
 
 
+def cmd_clear_stale_restart(_args):
+    """Called right before the game starts: a restart asked for while the server was preparing is
+    already covered (the game reads its files only now), unless a restore or a prospect choice was
+    asked for after this generation looked for them. Those keep their restart."""
+    if not (os.path.exists(RESTORE_FILE) or os.path.exists(CHOICE_FILE)):
+        try:
+            os.remove(RESTART_MARKER)
+        except OSError:
+            pass
+
+
 def cmd_restart(_args):
     state = load_state()
     if state.get("state") not in ("running", "starting", "updating", "restarting"):
@@ -1298,7 +1337,7 @@ COMMANDS = {
     "apply": cmd_apply, "args": cmd_args, "state": cmd_state, "note": cmd_note, "status": cmd_status,
     "settings": cmd_settings, "set-settings": cmd_set_settings, "join-password": cmd_join_password,
     "list": cmd_list, "set-list": cmd_set_list,
-    "players": cmd_players, "players-online": cmd_players_online, "restart": cmd_restart,
+    "players": cmd_players, "players-online": cmd_players_online, "restart": cmd_restart, "clear-stale-restart": cmd_clear_stale_restart,
     "prospects": cmd_prospects, "prospect-start": cmd_prospect_start, "prospect-delete": cmd_prospect_delete,
     "prospect-import": cmd_prospect_import, "prospect-guard": cmd_prospect_guard,
     "backups": cmd_backups, "backup": cmd_backup, "restore": cmd_restore, "do-restore": cmd_do_restore,

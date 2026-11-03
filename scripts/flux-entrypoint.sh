@@ -44,7 +44,7 @@ FLUX_RESTART_GRACE="${FLUX_RESTART_GRACE:-60}"
 # this long, then SIGKILL.
 FLUX_STOP_AFTER_SIGNAL="${FLUX_STOP_AFTER_SIGNAL:-4}"
 FLUX_BACKUP_HOURS="${FLUX_BACKUP_HOURS:-6}"
-export FLUX_BACKUP_KEEP="${FLUX_BACKUP_KEEP:-10}"
+export FLUX_BACKUP_KEEP="${FLUX_BACKUP_KEEP:-6}"
 FLUX_UPDATE_CHECK_MINUTES="${FLUX_UPDATE_CHECK_MINUTES:-30}"
 FLUX_UPDATE_WAIT_MINUTES="${FLUX_UPDATE_WAIT_MINUTES:-60}"
 FLUX_RESTART_WAIT_MINUTES="${FLUX_RESTART_WAIT_MINUTES:-60}"
@@ -311,6 +311,10 @@ start_generation() {
 
   # The launch line, one argument per line (fluxicarus.py args).
   mapfile -t args < <(ic args)
+  # A restart asked for while the server was still preparing (a save during the download) is already
+  # covered: the game reads its files only now. Left in place it would stop the game right after it
+  # starts. A restore or a prospect choice asked for since keeps its restart.
+  ic clear-stale-restart
   ic state starting "Loading the world"
   flux_banner "Icarus"
   flux_log "starting the server (generation ${generation}): $(printf '%s' "${args[*]}" | flux_redact)"

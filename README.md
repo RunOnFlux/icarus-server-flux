@@ -55,7 +55,7 @@ last start, so the hub's panel edits survive restarts.
 | `ICARUS_RESTART_TIME` | daily restart `HH:MM` (TZ, UTC if unset), on an empty server if one comes within 60 min | none |
 | `SKIP_UPDATE` | do not run SteamCMD (an install must exist) | off |
 | `FLUX_STOP_GRACE` / `FLUX_RESTART_GRACE` | seconds a stop / a planned restart may take | 8 / 60 |
-| `FLUX_BACKUP_HOURS`, `FLUX_BACKUP_KEEP` | backup cadence and count | 6, 6 |
+| `FLUX_BACKUP_HOURS`, `FLUX_BACKUP_KEEP`, `FLUX_BACKUP_KEEP_SAFETY` | backup cadence, count, and the ceiling of safety copies | 6, 6, 20 |
 | `FLUX_RESTART_MAX_ATTEMPTS`, `FLUX_RESTART_WINDOW` | crash budget | 5 per 3600 s |
 
 Passwords go to `ServerSettings.ini` (where the game reads them), never on the command line. The wiki says an
@@ -102,6 +102,7 @@ puts the newest backup's copy back.
 ## Versions
 
 - 1.0.0 (2026-10-29): first release.
+- 1.0.1: emptying a password in the deployment removes it; a restart asked for while the server prepares no longer stops the game right after it starts; safety backups are capped (newest 20, `FLUX_BACKUP_KEEP_SAFETY`); the regular backup count is really 6 (the entrypoint said 10); a bad `FLUX_BACKUP_*` number is the default instead of a crash.
 
 ## Measured
 

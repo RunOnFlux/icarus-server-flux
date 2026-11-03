@@ -335,6 +335,20 @@ check "another build is retried" "1" "$(status ic update-skip 26300000)"
 
 # Old game logs are pruned.
 mkdir -p "${saved}/Logs"
+# --- 1.0.1: stale restart marker, safety cap, emptied password ---------------------------------
+rm -f "${tmp}/restart-marker" "${data}/flux/restore-pending.json" "${data}/flux/prospect-choice.json"
+printf 'requested: from the panel\nnotbefore=0\n' >"${tmp}/restart-marker"
+ic clear-stale-restart >/dev/null
+check "a restart asked for while preparing is dropped before the launch" "no" "$([ -f "${tmp}/restart-marker" ] && echo yes || echo no)"
+printf 'requested: restore x\nnotbefore=0\n' >"${tmp}/restart-marker"
+mkdir -p "${data}/flux"
+echo '{"name":"x","asked":1}' >"${data}/flux/restore-pending.json"
+ic clear-stale-restart >/dev/null
+check "a restore asked for since keeps its restart" "yes" "$([ -f "${tmp}/restart-marker" ] && echo yes || echo no)"
+rm -f "${tmp}/restart-marker" "${data}/flux/restore-pending.json"
+for i in 1 2 3; do ic FLUX_BACKUP_KEEP_SAFETY=2 backup "before restoring t${i}" force >/dev/null; sleep 1; done
+check "safety copies stop at the ceiling" "2" "$(ic backups | python3 -c 'import json,sys; print(sum(b["why"].startswith("before") for b in json.load(sys.stdin)["backups"]))')"
+
 for i in 1 2 3 4 5 6 7; do : >"${saved}/Logs/Icarus-backup-2026.10.2${i}-10.00.00.log"; touch -d "2026-10-2${i} 10:00:00" "${saved}/Logs/Icarus-backup-2026.10.2${i}-10.00.00.log"; done
 check "the newest five game logs are kept" "5" "$(FLUX_GAME_LOG_DAYS=9999 ic apply >/dev/null; find "${saved}/Logs" -name 'Icarus-backup-*' | wc -l)"
 
