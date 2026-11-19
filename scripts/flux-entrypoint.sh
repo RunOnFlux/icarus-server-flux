@@ -129,6 +129,8 @@ update_server() {
   # install that is actually broken fails the first attempt, and every retry validates.
   validate=""
   local fresh=0 acf="${s}/steamapps/appmanifest_${FLUX_STEAM_APP}.acf"
+  # A stop in the middle of a fresh install leaves the old build's record only as .pre-fresh.
+  [ ! -f "${acf}" ] && [ -f "${acf}.pre-fresh" ] && [ -f "${s}/${FLUX_GAME_EXE}" ] && cp -f "${acf}.pre-fresh" "${acf}"
   for attempt in 1 2 3 4 5; do
     # app_info_update first: a fresh SteamCMD answers "Missing configuration" to the very first
     # app_update of this app (measured 2026-10-24) and stops; the next attempt works. That error is
@@ -145,7 +147,7 @@ update_server() {
       return 0
     fi
     [ "${terminating}" = "1" ] && return 1
-    if grep -aq "state is 0x6" /tmp/steamcmd.log && [ "${fresh}" = "0" ] && [ -f "${acf}" ]; then
+    if grep -aqE "state is 0x6( |$)" /tmp/steamcmd.log && [ "${fresh}" = "0" ] && [ -f "${acf}" ]; then
       # An update from build A to B needs A's depot manifests (SteamCMD's depotcache, kept on this
       # volume, see the top). When they are gone Steam will NOT hand an old manifest to an anonymous
       # login, and neither retrying nor validate gets past it: only a fresh install over the top does
@@ -153,7 +155,7 @@ update_server() {
       # network failure, which a re-download cannot fix.
       fresh=1
       validate=""
-      cp -f "${acf}" "${acf}.pre-fresh"
+      [ -f "${acf}.pre-fresh" ] || cp -f "${acf}" "${acf}.pre-fresh"
       rm -rf "${acf}" "${s}/steamapps/downloading" "${s}/steamapps/temp"
       flux_log "WARN Steam no longer serves the installed build's manifests; updating as a new install"
     elif ! grep -aq "Missing configuration" /tmp/steamcmd.log; then
@@ -165,7 +167,7 @@ update_server() {
   done
   # The fresh install did not finish: put the old build's record back, so the update watch still
   # knows which build is running.
-  [ "${fresh}" = "1" ] && [ ! -f "${acf}" ] && [ -f "${acf}.pre-fresh" ] && cp -f "${acf}.pre-fresh" "${acf}"
+  [ "${fresh}" = "1" ] && [ -f "${acf}.pre-fresh" ] && cp -f "${acf}.pre-fresh" "${acf}"
   if [ -f "${s}/${FLUX_GAME_EXE}" ]; then
     flux_log "WARN could not update from Steam; starting the build already installed"
     return 0
