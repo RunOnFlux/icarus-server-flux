@@ -103,6 +103,7 @@ puts the newest backup's copy back.
 
 - 1.0.0 (2026-10-29): first release.
 - 1.0.1: emptying a password in the deployment removes it; a restart asked for while the server prepares no longer stops the game right after it starts; safety backups are capped (newest 20, `FLUX_BACKUP_KEEP_SAFETY`); the regular backup count is really 6 (the entrypoint said 10); a bad `FLUX_BACKUP_*` number is the default instead of a crash.
+- 1.0.2: an update that Steam answers with `state is 0x6 after update job` (the installed build's manifests are gone after a redeploy, and Steam does not serve old manifests to an anonymous login) is redone once as a new install over the top instead of starting the old build; SteamCMD's depotcache is kept on the install volume.
 
 ## Measured
 

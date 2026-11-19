@@ -349,7 +349,7 @@ rm -f "${tmp}/restart-marker" "${data}/flux/restore-pending.json"
 for i in 1 2 3; do ic FLUX_BACKUP_KEEP_SAFETY=2 backup "before restoring t${i}" force >/dev/null; sleep 1; done
 check "safety copies stop at the ceiling" "2" "$(ic backups | python3 -c 'import json,sys; print(sum(b["why"].startswith("before") for b in json.load(sys.stdin)["backups"]))')"
 
-for i in 1 2 3 4 5 6 7; do : >"${saved}/Logs/Icarus-backup-2026.10.2${i}-10.00.00.log"; touch -d "2026-10-2${i} 10:00:00" "${saved}/Logs/Icarus-backup-2026.10.2${i}-10.00.00.log"; done
+for i in 1 2 3 4 5 6 7; do : >"${saved}/Logs/Icarus-backup-2026.10.2${i}-10.00.00.log"; touch -d "$((8 - i)) hours ago" "${saved}/Logs/Icarus-backup-2026.10.2${i}-10.00.00.log"; done
 check "the newest five game logs are kept" "5" "$(FLUX_GAME_LOG_DAYS=9999 ic apply >/dev/null; find "${saved}/Logs" -name 'Icarus-backup-*' | wc -l)"
 
 printf '\n%d passed, %d failed\n' "${pass}" "${fail}"
