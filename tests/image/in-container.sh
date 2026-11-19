@@ -53,9 +53,15 @@ for a in "$@"; do [ "${prev:-}" = "+force_install_dir" ] && dir="$a"; prev="$a";
 echo "$*" >>/tmp/steamcmd-calls
 [ -n "${dir}" ] || exit 0
 if [ ! -f /tmp/.first-failed ]; then touch /tmp/.first-failed; echo "ERROR! Failed to install app '2089300' (Missing configuration)"; exit 8; fi
+build=100
+if [ -f /tmp/.need-fresh ]; then
+  # Steam refuses the old build's manifests: every update over an existing install ends in 0x6, only a fresh install works.
+  if [ -f "${dir}/steamapps/appmanifest_2089300.acf" ]; then echo "Error! App '2089300' state is 0x6 after update job."; exit 8; fi
+  rm -f /tmp/.need-fresh; build=200
+fi
 mkdir -p "${dir}/steamapps" "${dir}/Icarus/Binaries/Win64"
 : >"${dir}/Icarus/Binaries/Win64/IcarusServer-Win64-Shipping.exe"
-printf '"AppState"\n{\n\t"buildid"\t\t"100"\n}\n' >"${dir}/steamapps/appmanifest_2089300.acf"
+printf '"AppState"\n{\n\t"buildid"\t\t"%s"\n}\n' "${build}" >"${dir}/steamapps/appmanifest_2089300.acf"
 if [ -f /tmp/.installed ]; then echo "Success! App '2089300' already up to date."; else touch /tmp/.installed; echo "Success! App '2089300' fully installed."; fi
 STUB
 cat >/opt/standin/Icarus/Binaries/Win64/IcarusServer-Win64-Shipping.exe <<'GAME'
@@ -209,6 +215,21 @@ check "with no prospect the server comes up in its lobby" "0" "$(status wait_for
 check "started with an empty LoadProspect" "1" "$(grep -c 'load=$' /tmp/entry3.log)"
 kill -TERM "${entry3}"
 wait_for '! kill -0 ${entry3} 2>/dev/null' 10
+
+# Steam answers "state is 0x6" (the old build's manifests are gone): once, a fresh install over the top.
+check "the depotcache is on the install volume" "${srv}/flux-steam/depotcache" "$(readlink "${HOME:-/root}/.local/share/Steam/depotcache")"
+: >/tmp/.need-fresh
+: >/tmp/steamcmd-calls
+STANDIN_PLAYER='' /opt/flux/flux-entrypoint.sh >/tmp/entry4.log 2>&1 &
+entry4=$!
+check "a 0x6 update is redone as a new install and the server starts" "0" "$(status wait_for 'grep -q "the server is up" /tmp/entry4.log' 40)"
+check "after one failed attempt" "2" "$(wc -l </tmp/steamcmd-calls)"
+check "without validate" "0" "$(grep -c validate /tmp/steamcmd-calls)"
+check "the new build is installed" "200" "$(grep -o '"[0-9]*"' "${srv}/steamapps/appmanifest_2089300.acf" | tail -1 | tr -d '"')"
+check "and says why" "1" "$(grep -c 'updating as a new install' /tmp/entry4.log)"
+check "no leftover copy of the record" "1" "$(status test -e "${srv}/steamapps/appmanifest_2089300.acf.pre-fresh")"
+kill -TERM "${entry4}"
+wait_for '! kill -0 ${entry4} 2>/dev/null' 10
 
 # A port the server cannot use is not a crash: the state says what to change and nothing restarts.
 ICARUS_GAME_PORT=80 /opt/flux/flux-entrypoint.sh >/tmp/entry2.log 2>&1 &
