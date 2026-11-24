@@ -132,6 +132,7 @@ update_server() {
   # A stop in the middle of a fresh install leaves the old build's record only as .pre-fresh.
   [ ! -f "${acf}" ] && [ -f "${acf}.pre-fresh" ] && [ -f "${s}/${FLUX_GAME_EXE}" ] && cp -f "${acf}.pre-fresh" "${acf}"
   for attempt in 1 2 3 4 5; do
+    [ "${terminating}" = "1" ] && return 2
     # app_info_update first: a fresh SteamCMD answers "Missing configuration" to the very first
     # app_update of this app (measured 2026-10-24) and stops; the next attempt works. That error is
     # retried at once WITHOUT validate (validate re-hashes the whole 3 GB install).
@@ -146,7 +147,7 @@ update_server() {
       flux_log "server build $(flux_installed_build "${s}/steamapps/appmanifest_${FLUX_STEAM_APP}.acf")"
       return 0
     fi
-    [ "${terminating}" = "1" ] && return 1
+    [ "${terminating}" = "1" ] && return 2
     if grep -aqE "state is 0x6( |$)" /tmp/steamcmd.log && [ "${fresh}" = "0" ] && [ -f "${acf}" ]; then
       # An update from build A to B needs A's depot manifests (SteamCMD's depotcache, kept on this
       # volume, see the top). When they are gone Steam will NOT hand an old manifest to an anonymous
@@ -308,7 +309,8 @@ start_generation() {
   # A state left by the container that was here before (a kill, a node reboot) is stale from now on.
   ic state updating "Preparing the server"
 
-  update_server || return 1
+  update_server
+  case $? in 0) ;; 2) return 2 ;; *) return 1 ;; esac
   while IFS= read -r line; do flux_log "${line#\# }"; done < <(ic update-check 2>&1)
   [ "${terminating}" = "1" ] && return 2
   # A restore the panel asked for, before anything reads the server's files.

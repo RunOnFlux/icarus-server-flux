@@ -54,6 +54,8 @@ echo "$*" >>/tmp/steamcmd-calls
 [ -n "${dir}" ] || exit 0
 if [ ! -f /tmp/.first-failed ]; then touch /tmp/.first-failed; echo "ERROR! Failed to install app '2089300' (Missing configuration)"; exit 8; fi
 build=100
+# A download that is still running when the stop arrives.
+if [ -f /tmp/.slow ]; then sleep 60; exit 8; fi
 if [ -f /tmp/.need-fresh ]; then
   # Steam refuses the old build's manifests: every update over an existing install ends in 0x6, only a fresh install works.
   if [ -f "${dir}/steamapps/appmanifest_2089300.acf" ]; then echo "Error! App '2089300' state is 0x6 after update job."; exit 8; fi
@@ -230,6 +232,20 @@ check "and says why" "1" "$(grep -c 'updating as a new install' /tmp/entry4.log)
 check "no leftover copy of the record" "1" "$(status test -e "${srv}/steamapps/appmanifest_2089300.acf.pre-fresh")"
 kill -TERM "${entry4}"
 wait_for '! kill -0 ${entry4} 2>/dev/null' 10
+
+# A stop while SteamCMD is still downloading: stopped, not a crash, quickly.
+: >/tmp/.slow
+STANDIN_PLAYER='' /opt/flux/flux-entrypoint.sh >/tmp/entry5.log 2>&1 &
+entry5=$!
+wait_for 'grep -q "updating the server from Steam" /tmp/entry5.log' 20
+start="$(date +%s)"
+kill -TERM "${entry5}"
+check "a stop during the download ends the supervisor" "0" "$(status wait_for '! kill -0 ${entry5} 2>/dev/null' 10)"
+check "inside Docker's 10 seconds" "0" "$(status test $(($(date +%s) - start)) -le 6)"
+check "as stopped, not crashed" "stopped" "$(python3 -c 'import json;print(json.load(open("'"${data}"'/flux/state.json"))["state"])')"
+check "and not as an error" "0" "$(grep -c 'could not be prepared' /tmp/entry5.log)"
+pkill -f 'sleep 60' 2>/dev/null
+rm -f /tmp/.slow
 
 # A port the server cannot use is not a crash: the state says what to change and nothing restarts.
 ICARUS_GAME_PORT=80 /opt/flux/flux-entrypoint.sh >/tmp/entry2.log 2>&1 &
